@@ -1,0 +1,114 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local remote = ReplicatedStorage:WaitForChild("MissileControl")
+
+local controlling = false
+
+-- 既存GUIがあれば削除
+local playerGui = player:WaitForChild("PlayerGui")
+local oldGui = playerGui:FindFirstChild("ミサイル操作GUI")
+if oldGui then
+	oldGui:Destroy()
+end
+
+-- GUI作成
+local gui = Instance.new("ScreenGui")
+gui.Name = "ミサイル操作GUI"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+local fireBtn = Instance.new("TextButton")
+fireBtn.Name = "発射ボタン"
+fireBtn.Size = UDim2.new(0, 120, 0, 60)
+fireBtn.Position = UDim2.new(0, 20, 1, -80)
+fireBtn.AnchorPoint = Vector2.new(0, 1)
+fireBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+fireBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+fireBtn.TextScaled = true
+fireBtn.Text = "発射"
+fireBtn.Parent = gui
+
+local stopBtn = Instance.new("TextButton")
+stopBtn.Name = "停止爆発ボタン"
+stopBtn.Size = UDim2.new(0, 120, 0, 60)
+stopBtn.Position = UDim2.new(1, -20, 1, -80)
+stopBtn.AnchorPoint = Vector2.new(1, 1)
+stopBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 200)
+stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+stopBtn.TextScaled = true
+stopBtn.Text = "停止爆発"
+stopBtn.Parent = gui
+
+local info = Instance.new("TextLabel")
+info.Size = UDim2.new(1, 0, 0, 30)
+info.Position = UDim2.new(0, 0, 0, 10)
+info.BackgroundTransparency = 1
+info.TextColor3 = Color3.fromRGB(255, 255, 255)
+info.TextStrokeTransparency = 0
+info.TextScaled = true
+info.Text = "画面タッチで照準 / 発射 / 停止爆発"
+info.Parent = gui
+
+-- タッチ位置から狙う座標を計算
+local function getTouchTarget(screenPos)
+	local camera = workspace.CurrentCamera
+	if not camera then return nil end
+
+	local ray = camera:ScreenPointToRay(screenPos.X, screenPos.Y)
+
+	-- 自分とミサイル本体をRaycastから除外
+	local filter = {player.Character}
+	for _, obj in ipairs(workspace:GetChildren()) do
+		if obj.Name == "物人ミサイル" then
+			table.insert(filter, obj)
+		end
+	end
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = filter
+
+	local result = workspace:Raycast(ray.Origin, ray.Direction * 1000, params)
+	if result then
+		return result.Position
+	else
+		return ray.Origin + ray.Direction * 1000
+	end
+end
+
+-- 発射
+fireBtn.MouseButton1Click:Connect(function()
+	remote:FireServer("spawn")
+	controlling = true
+end)
+
+-- 停止して爆発
+stopBtn.MouseButton1Click:Connect(function()
+	remote:FireServer("stop")
+	controlling = false
+end)
+
+-- スマホ：タッチ開始で照準
+UserInputService.TouchStarted:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if not controlling then return end
+
+	local target = getTouchTarget(input.Position)
+	if target then
+		remote:FireServer("target", target)
+	end
+end)
+
+-- スマホ：指を動かして誘導
+UserInputService.TouchMoved:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if not controlling then return end
+
+	local target = getTouchTarget(input.Position)
+	if target then
+		remote:FireServer("target", target)
+	end
+end)
